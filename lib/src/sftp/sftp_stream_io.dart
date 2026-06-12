@@ -72,7 +72,10 @@ class SftpFileWriter with DoneFuture {
   ///
   /// Calling [abort] will make [done] to complete immediately.
   Future<void> abort() async {
-    _doneCompleter.complete();
+    // 1term fork: write가 자연 종료된 직후 사용자가 cancel하면
+    // _handleLocalDone이 먼저 complete → abort가 두 번째 complete →
+    // "Bad state: Future already completed" async throw. isCompleted 가드.
+    if (!_doneCompleter.isCompleted) _doneCompleter.complete();
     await _subscription.cancel();
   }
 
@@ -131,9 +134,9 @@ class SftpFileWriter with DoneFuture {
   /// if no more data remains to be processed.
   void _handleLocalDone() {
     _streamDone = true;
-    if (_bytesSent == _bytesAcked) {
+    if (_bytesSent == _bytesAcked && !_doneCompleter.isCompleted) {
       _doneCompleter.complete();
-    }
+    } 
   }
 }
 
