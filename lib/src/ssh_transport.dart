@@ -161,11 +161,11 @@ class SSHTransport {
   /// cipher IV, cipher key and MAC key.
   BigInt? _sharedSecret;
 
-  /// A [BlockCipher] to encrypt data sent to the other side.
-  BlockCipher? _encryptCipher;
+  /// Cipher for data sent to the other side.
+  SSHPacketCipher? _encryptCipher;
 
-  /// A [BlockCipher] to decrypt data sent from the other side.
-  BlockCipher? _decryptCipher;
+  /// Cipher for data sent from the other side.
+  SSHPacketCipher? _decryptCipher;
 
   Uint8List? _localCipherKey;
 
@@ -176,10 +176,10 @@ class SSHTransport {
   Uint8List? _remoteIV;
 
   /// A [Mac] used to authenticate data sent to the other side.
-  Mac? _localMac;
+  SSHPacketMac? _localMac;
 
   /// A [Mac] used to authenticate data sent from the other side.
-  Mac? _remoteMac;
+  SSHPacketMac? _remoteMac;
 
   final _localPacketSN = SSHPacketSN.fromZero();
 
@@ -266,13 +266,13 @@ class SSHTransport {
       }
 
       // Encrypt the payload
-      final encryptedPayload = _encryptCipher!.processAll(payloadToEncrypt);
+      final encryptedPayload = _encryptCipher!.process(payloadToEncrypt);
 
       // Calculate MAC on the packet length and encrypted payload
       final mac = _localMac!;
-      mac.updateAll(_localPacketSN.value.toUint32());
-      mac.updateAll(packetLengthBytes);
-      mac.updateAll(encryptedPayload);
+      mac.update(_localPacketSN.value.toUint32());
+      mac.update(packetLengthBytes);
+      mac.update(encryptedPayload);
       final macBytes = mac.finish();
 
       // Build the final packet: length + encrypted payload + MAC
@@ -295,14 +295,14 @@ class SSHTransport {
         socket.sink.add(packet);
       } else {
         final mac = _localMac!;
-        final encryptedPacket = _encryptCipher!.processAll(packet);
+        final encryptedPacket = _encryptCipher!.process(packet);
 
         final buffer = BytesBuilder(copy: false);
         buffer.add(encryptedPacket);
 
         // Calculate MAC on the unencrypted packet
-        mac.updateAll(_localPacketSN.value.toUint32());
-        mac.updateAll(packet);
+        mac.update(_localPacketSN.value.toUint32());
+        mac.update(packet);
         buffer.add(mac.finish());
 
         socket.sink.add(buffer.takeBytes());
@@ -590,7 +590,7 @@ class SSHTransport {
       }
 
       // Decrypt the payload
-      final decryptedPayload = _decryptCipher!.processAll(encryptedPayload);
+      final decryptedPayload = _decryptCipher!.process(encryptedPayload);
 
       // Process the decrypted payload
       final paddingLength = decryptedPayload[0];
@@ -633,9 +633,12 @@ class SSHTransport {
         return null;
       }
 
-      while (_decryptBuffer.length < 4 + packetLength) {
-        final block = _buffer.consume(blockSize);
-        _decryptBuffer.add(_decryptCipher!.process(block));
+      // Decrypt the rest of the packet in one call (whole blocks, same bytes
+      // the former block-by-block loop consumed) — native ciphers pay per call.
+      final remaining = 4 + packetLength - _decryptBuffer.length;
+      if (remaining > 0) {
+        final rest = (remaining + blockSize - 1) ~/ blockSize * blockSize;
+        _decryptBuffer.add(_decryptCipher!.process(_buffer.consume(rest)));
       }
 
       final packet = _decryptBuffer.consume(packetLength + 4);
@@ -731,14 +734,14 @@ class SSHTransport {
     final macType = isClient ? _serverMacType! : _clientMacType!;
     final isEtm = macType.isEtm;
 
-    _remoteMac!.updateAll(_remotePacketSN.value.toUint32());
+    _remoteMac!.update(_remotePacketSN.value.toUint32());
 
     // For ETM algorithms, the MAC is calculated on the packet length and encrypted payload
     // For standard MAC algorithms, the MAC is calculated on the unencrypted packet
     if (isEtm && isEncrypted) {
-      _remoteMac!.updateAll(payload);
+      _remoteMac!.update(payload);
     } else if (!isEtm && !isEncrypted) {
-      _remoteMac!.updateAll(payload);
+      _remoteMac!.update(payload);
     } else {
       throw SSHPacketError(
         'MAC algorithm mismatch: isEtm=$isEtm, isEncrypted=$isEncrypted',
@@ -781,7 +784,7 @@ class SSHTransport {
       return;
     }
 
-    _encryptCipher = cipherType.createCipher(
+    _encryptCipher = cipherType.createPacketCipher(
       _localCipherKey!,
       _localIV!,
       forEncryption: true,
@@ -795,7 +798,7 @@ class SSHTransport {
       macType.keySize,
     );
 
-    _localMac = macType.createMac(macKey);
+    _localMac = macType.createPacketMac(macKey);
   }
 
   void _applyRemoteKeys() {
@@ -817,7 +820,7 @@ class SSHTransport {
       return;
     }
 
-    _decryptCipher = cipherType.createCipher(
+    _decryptCipher = cipherType.createPacketCipher(
       _remoteCipherKey!,
       _remoteIV!,
       forEncryption: false,
@@ -830,7 +833,7 @@ class SSHTransport {
       isClient ? SSHDeriveKeyType.serverMacKey : SSHDeriveKeyType.clientMacKey,
       macType.keySize,
     );
-    _remoteMac = macType.createMac(macKey);
+    _remoteMac = macType.createPacketMac(macKey);
   }
 
   Uint8List _deriveKey(SSHDeriveKeyType keyType, int keySize) {

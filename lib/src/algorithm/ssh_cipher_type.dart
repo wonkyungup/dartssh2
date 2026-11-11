@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:dartssh2/src/ssh_algorithm.dart';
+import 'package:dartssh2/src/ssh_crypto.dart';
 import 'package:pointycastle/export.dart';
 
 class SSHCipherType extends SSHAlgorithm {
@@ -132,6 +133,19 @@ class SSHCipherType extends SSHAlgorithm {
     final cipher = factory();
     cipher.init(forEncryption, ParametersWithIV(KeyParameter(key), iv));
     return cipher;
+  }
+
+  /// Transport cipher: [SSHCrypto.provider]'s implementation when it has one,
+  /// otherwise [createCipher] (pure Dart).
+  SSHPacketCipher createPacketCipher(
+    Uint8List key,
+    Uint8List iv, {
+    required bool forEncryption,
+  }) {
+    final block = createCipher(key, iv, forEncryption: forEncryption);
+    final native = SSHCrypto.provider
+        ?.createCipher(name, key, iv, forEncryption: forEncryption);
+    return native ?? BlockSSHPacketCipher(block);
   }
 }
 

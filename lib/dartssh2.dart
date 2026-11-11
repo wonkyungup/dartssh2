@@ -1,4 +1,5 @@
 export 'src/ssh_algorithm.dart' show SSHAlgorithms;
+export 'src/ssh_crypto.dart';
 export 'src/ssh_agent.dart';
 export 'src/ssh_client.dart';
 export 'src/ssh_errors.dart';

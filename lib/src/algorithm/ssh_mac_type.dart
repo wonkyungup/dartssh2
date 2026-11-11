@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:dartssh2/src/ssh_algorithm.dart';
+import 'package:dartssh2/src/ssh_crypto.dart';
 import 'package:pointycastle/export.dart';
 
 import '../utils/truncated_hmac.dart';
@@ -82,6 +83,14 @@ class SSHMacType extends SSHAlgorithm {
     final mac = macFactory();
     mac.init(KeyParameter(key));
     return mac;
+  }
+
+  /// Transport MAC: [SSHCrypto.provider]'s implementation when it has one,
+  /// otherwise [createMac] (pure Dart).
+  SSHPacketMac createPacketMac(Uint8List key) {
+    final mac = createMac(key);
+    return SSHCrypto.provider?.createMac(name, key) ??
+        PointycastleSSHPacketMac(mac);
   }
 }
 
