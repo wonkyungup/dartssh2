@@ -1,4 +1,5 @@
 ## [Unreleased]
+- Made agent forwarding best-effort: when the server refuses `auth-agent-req@openssh.com` (e.g. `AllowAgentForwarding no`), `shell()`/`execute()` no longer close the channel and throw; the session opens as OpenSSH does. The outcome is exposed as `SSHSession.agentForwardingAccepted` (`true`/`false`, `null` when no `agentHandler`).
 - Added `SSHPtyConfig.modes` (`Map<int, int>?`) for sending RFC 4254 §8 terminal modes at pty-req time; wired through `SSHClient.shell()` and `SSHClient.execute()` via the existing `terminalModes` parameter of `sendPtyReq`. Common use: `{53: 0}` to disable ECHO at PTY creation, so callers injecting shell setup don't race against `stty -echo`. Default behavior unchanged when `modes` is omitted.
 
 ## [2.17.1] - 2026-04-12

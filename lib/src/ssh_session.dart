@@ -28,6 +28,12 @@ class SSHSession {
   /// remote ssh implementation does not report exit signals.
   SSHSessionExitSignal? get exitSignal => _exitSignal;
 
+  /// Result of the agent forwarding request made when this session was
+  /// opened: `true` accepted, `false` refused by the server, `null` not
+  /// requested (no [SSHClient.agentHandler]). A refusal does not fail the
+  /// session.
+  bool? agentForwardingAccepted;
+
   /// This [Future] completes when the channel is closed. More data may still
   /// be available on the [stdout] and [stderr] streams at this time.
   Future<void> get done => _channel.done;

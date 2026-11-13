@@ -469,12 +469,12 @@ class SSHClient {
       }
     }
 
+    // Agent forwarding is best-effort (like OpenSSH): a server that refuses
+    // it (`AllowAgentForwarding no`) must not fail the whole session. The
+    // outcome is exposed as [SSHSession.agentForwardingAccepted].
+    bool? agentOk;
     if (agentHandler != null) {
-      final agentOk = await channelController.sendAgentForwardingRequest();
-      if (!agentOk) {
-        channelController.close();
-        throw SSHChannelRequestError('Failed to request agent forwarding');
-      }
+      agentOk = await channelController.sendAgentForwardingRequest();
     }
 
     if (pty != null) {
@@ -511,7 +511,8 @@ class SSHClient {
       throw SSHChannelRequestError('Failed to execute');
     }
 
-    return SSHSession(channelController.channel);
+    return SSHSession(channelController.channel)
+      ..agentForwardingAccepted = agentOk;
   }
 
   /// Start a shell on the remote side. Returns a [SSHSession] that can be
@@ -537,12 +538,12 @@ class SSHClient {
       }
     }
 
+    // Agent forwarding is best-effort (like OpenSSH): a server that refuses
+    // it (`AllowAgentForwarding no`) must not fail the whole session. The
+    // outcome is exposed as [SSHSession.agentForwardingAccepted].
+    bool? agentOk;
     if (agentHandler != null) {
-      final agentOk = await channelController.sendAgentForwardingRequest();
-      if (!agentOk) {
-        channelController.close();
-        throw SSHChannelRequestError('Failed to request agent forwarding');
-      }
+      agentOk = await channelController.sendAgentForwardingRequest();
     }
 
     if (pty != null) {
@@ -578,7 +579,8 @@ class SSHClient {
       throw SSHChannelRequestError('Failed to start shell');
     }
 
-    return SSHSession(channelController.channel);
+    return SSHSession(channelController.channel)
+      ..agentForwardingAccepted = agentOk;
   }
 
   Future<void> subsystem(String subsystem) async {
